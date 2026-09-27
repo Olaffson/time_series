@@ -8,6 +8,11 @@ L'objectif principal de ce projet est de réaliser une veille sur les séries te
 ## Données du Projet
 Les données de consommation électrique des Hauts de France sont disponibles sur le site [data.gouv.fr](https://www.data.gouv.fr/fr/datasets/consommation-quotidienne-brute-regionale/).
 
+## Installation et exécution
+1. Installer les dépendances : `pip install -r requirements.txt`
+2. Télécharger le fichier CSV de la consommation quotidienne brute régionale (séparateur `;`) et l'enregistrer sous `data/data.csv` à la racine du projet (les fichiers `.csv` ne sont pas versionnés).
+3. Exécuter les notebooks du dossier `notebook/` dans l'ordre (`1_analys`, puis `3_model`), de haut en bas. `3_model` génère les fichiers `data/hdf_dataset.csv` et `data/hdf_daily.csv`.
+
 ## Ressources
 Pour mener à bien ce projet, vous pouvez utiliser les ressources suivantes :
 - [Découverte des séries temporelles](https://drive.google.com/drive/folders/1MDKoX3FVXQx2Qax8eCRjPfwW5P1xb8pP)

@@ -1,0 +1,10 @@
+pandas>=1.5,<3
+numpy<2
+matplotlib
+statsmodels
+scikit-learn
+pmdarima
+xgboost
+prophet
+u8darts
+jupyter
