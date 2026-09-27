@@ -16,12 +16,12 @@ Les données de consommation électrique des Hauts de France sont disponibles su
 ## Contenu du dépôt
 - `notebook/1_analys.ipynb` : découverte et analyse de la série. Agrégations, moyenne mobile, box-plots de saisonnalité, tests de stationnarité (Dickey-Fuller, KPSS), désaisonnalisation annuelle et décomposition additive ou multiplicative.
 - `notebook/2_veille.ipynb` : veille sur les modèles de séries temporelles.
-- `notebook/3_model.ipynb` : modélisation et prévision (ARIMA, SARIMA, Naive Drift avec Darts, XGBoost, Prophet).
+- `notebook/3_model.ipynb` : modélisation et prévision (ARIMA, SARIMA, Naive Drift et Naive saisonnier avec Darts, XGBoost, Prophet).
 - `notebook/correction/` : notebooks de correction.
 - `rapport/` : rapport de veille (formats ODT et PDF).
 
 ## Démarche de modélisation
-- **Série utilisée** : la consommation des Hauts-de-France est moyennée par jour. Les modèles ARIMA, SARIMA et Naive Drift travaillent sur la série **désaisonnalisée** : on retire la composante saisonnière annuelle (période de 365 jours) obtenue par `seasonal_decompose`.
+- **Série utilisée** : la consommation des Hauts-de-France est moyennée par jour. Les modèles ARIMA, SARIMA, Naive Drift et Naive saisonnier travaillent sur la série **désaisonnalisée** : on retire la composante saisonnière annuelle (période de 365 jours) obtenue par `seasonal_decompose`.
 - **Choix des ordres** : les ordres des modèles ARIMA et SARIMA ne sont pas fixés à la main. Ils sont trouvés par `auto_arima` (librairie pmdarima), qui minimise l'AIC. Les modèles statsmodels reprennent ensuite ces ordres et la constante, et chaque cellule affiche le modèle retenu.
   - ARIMA (question 7) : recherche sur toute la série, sans séparation entraînement/test.
   - SARIMA : saisonnalité hebdomadaire (m=7), recherche sur les seules données d'entraînement.
