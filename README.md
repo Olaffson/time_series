@@ -18,7 +18,23 @@ Les données de consommation électrique des Hauts de France sont disponibles su
 - `notebook/2_veille.ipynb` : veille sur les modèles de séries temporelles.
 - `notebook/3_model.ipynb` : modélisation et prévision (ARIMA, SARIMA, Naive Drift et Naive saisonnier avec Darts, XGBoost, Prophet).
 - `notebook/correction/` : notebooks de correction.
+- `app/` : application Streamlit de présentation du projet (voir ci-dessous).
 - `rapport/` : rapport de veille (formats ODT et PDF).
+
+## Application Streamlit
+L'application présente le projet de façon interactive. Pour la lancer depuis la racine du dépôt :
+
+```bash
+streamlit run app/streamlit_app.py
+```
+
+Elle utilise `data/data.csv`, ou à défaut `data/hdf_daily.csv` produit par le notebook `3_model`. On peut aussi charger un fichier CSV depuis la barre latérale. Elle comporte quatre onglets :
+- **Présentation** : objectif, démarche et chiffres clés de la série.
+- **Exploration** : série journalière avec moyenne mobile réglable, agrégations (semaine, mois, trimestre, année) et box-plots de saisonnalité (mois, jour de la semaine, heure).
+- **Saisonnalité et stationnarité** : décomposition additive annuelle et tests ADF et KPSS, sur la série brute et sur la série désaisonnalisée.
+- **Prévisions** : choix de la période de test (un ou deux ans) et des modèles (Naive Drift, Naive saisonnier, SARIMA avec ordres manuels ou trouvés par `auto_arima`, XGBoost, Prophet), graphique des prévisions et tableau MAPE, MAE et RMSE.
+
+Dans l'application, toutes les prévisions sont comparées sur la consommation réelle. Les modèles qui travaillent sur la série désaisonnalisée réintègrent la saisonnalité annuelle, estimée sur la seule période d'entraînement.
 
 ## Démarche de modélisation
 - **Série utilisée** : la consommation des Hauts-de-France est moyennée par jour. Les modèles ARIMA, SARIMA, Naive Drift et Naive saisonnier travaillent sur la série **désaisonnalisée** : on retire la composante saisonnière annuelle (période de 365 jours) obtenue par `seasonal_decompose`.
