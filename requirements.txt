@@ -8,3 +8,5 @@ xgboost
 prophet
 u8darts
 jupyter
+streamlit>=1.40
+plotly
