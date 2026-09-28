@@ -33,7 +33,11 @@ COULEURS_MODELES = {
     "SARIMA": "#1baf7a",
     "XGBoost": "#eda100",
     "Prophet": "#e87ba4",
+    "XGBoost + température": "#008300",
+    "VARIMA (conso + température)": "#4a3aa7",
 }
+MODELES_METEO = ("XGBoost + température", "VARIMA (conso + température)")
+COULEUR_TEMPERATURE = "#eb6834"
 MOIS = ["Janv.", "Févr.", "Mars", "Avr.", "Mai", "Juin", "Juil.", "Août", "Sept.", "Oct.", "Nov.", "Déc."]
 JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
 UNITE = "Consommation moyenne (MW)"
@@ -41,8 +45,13 @@ UNITE = "Consommation moyenne (MW)"
 
 # --- Données -----------------------------------------------------------------
 
+def date_modification(contenu, nom):
+    """Date de modification du fichier local : un fichier remplacé est ainsi relu, et pas pris dans le cache."""
+    return Path(nom).stat().st_mtime if contenu is None else None
+
+
 @st.cache_data(show_spinner="Chargement des données…")
-def charger(contenu, nom):
+def charger(contenu, nom, modifie_le=None):
     source = io.BytesIO(contenu) if contenu is not None else nom
     demi_horaire = donnees.serie_demi_horaire(donnees.lire_brut(source))
     journaliere = donnees.serie_journaliere(demi_horaire)
@@ -61,6 +70,25 @@ def source_des_donnees():
         if chemin.exists():
             st.sidebar.caption(f"Fichier utilisé : `data/{nom}`")
             return None, str(chemin)
+    return None, None
+
+
+@st.cache_data(show_spinner="Chargement de la température…")
+def charger_temperature(contenu, nom, modifie_le=None):
+    return donnees.lire_temperature(io.BytesIO(contenu) if contenu is not None else nom)
+
+
+def source_temperature():
+    fichier = st.sidebar.file_uploader("Fichier météo ODRE (facultatif)", type="csv",
+                                       help="Température quotidienne régionale, séparateur `;`.")
+    if fichier is not None:
+        return fichier.getvalue(), fichier.name
+    chemin = donnees.DOSSIER_DATA / donnees.FICHIER_TEMPERATURE
+    if chemin.exists():
+        st.sidebar.caption(f"Météo : `data/{donnees.FICHIER_TEMPERATURE}`")
+        return None, str(chemin)
+    st.sidebar.caption(f"Sans fichier météo (`data/{donnees.FICHIER_TEMPERATURE}`), l'onglet Météo et les "
+                       "modèles avec température sont masqués.")
     return None, None
 
 
@@ -89,6 +117,8 @@ et compare plusieurs modèles pour la prévoir.
 2. **Stationnarité** : tests de Dickey-Fuller et KPSS, puis retrait de la saisonnalité annuelle.
 3. **Prévision** : Naive Drift, Naive saisonnier, SARIMA, XGBoost et Prophet, comparés avec la MAPE
    sur une période de test.
+4. **Météo** (si le fichier de température est disponible) : lien entre température et consommation,
+   XGBoost avec la température et modèle VARIMA sur le couple consommation / température.
 """
     )
     c1, c2, c3, c4 = st.columns(4)
@@ -190,13 +220,64 @@ def onglet_stationnarite(journaliere):
     st.dataframe(tableau)
 
 
+def onglet_meteo(journaliere, temperature):
+    commun = pd.concat([journaliere.rename("consommation"), temperature], axis=1, join="inner").dropna()
+    if len(commun) < 30:
+        st.warning("La consommation et la température n'ont presque aucune date en commun.")
+        return
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Période commune", f"{commun.index[0]:%Y} – {commun.index[-1]:%Y}",
+              help=f"Du {commun.index[0]:%d/%m/%Y} au {commun.index[-1]:%d/%m/%Y}")
+    c2.metric("Température moyenne", f"{commun['temperature'].mean():.1f} °C".replace(".", ","))
+    c3.metric("Corrélation température / consommation", f"{commun.corr().iloc[0, 1]:.2f}".replace(".", ","))
+
+    st.subheader("Consommation et température")
+    # Deux graphiques alignés plutôt qu'un double axe : chaque série garde sa propre échelle
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.08,
+                        subplot_titles=["Consommation journalière (MW)", "Température moyenne (°C)"])
+    fig.add_scatter(x=commun.index, y=commun["consommation"], row=1, col=1, name="Consommation",
+                    line=dict(color=COULEURS_MODELES["Naive Drift"], width=1.2), showlegend=False)
+    fig.add_scatter(x=commun.index, y=commun["temperature"], row=2, col=1, name="Température",
+                    line=dict(color=COULEUR_TEMPERATURE, width=1.2), showlegend=False)
+    fig = mise_en_forme(fig, 560)
+    fig.update_layout(hovermode="x")
+    st.plotly_chart(fig)
+
+    st.subheader("Consommation en fonction de la température")
+    paliers = commun.groupby(commun["temperature"].round())["consommation"].mean()
+    fig = go.Figure()
+    fig.add_scatter(x=commun["temperature"], y=commun["consommation"], mode="markers", name="Jours",
+                    marker=dict(color=COULEURS_MODELES["Naive Drift"], size=5, opacity=0.35),
+                    hovertemplate="%{x:.1f} °C : %{y:,.0f} MW<extra></extra>")
+    fig.add_scatter(x=paliers.index, y=paliers, mode="lines", name="Moyenne par degré",
+                    line=dict(color=COULEUR_REEL, width=2.5))
+    fig.update_xaxes(title="Température moyenne (°C)")
+    fig.update_yaxes(title=UNITE)
+    fig = mise_en_forme(fig, 440)
+    fig.update_layout(hovermode="closest")
+    st.plotly_chart(fig)
+    st.caption("La consommation augmente quand il fait froid, sous l'effet du chauffage électrique. "
+               "La courbe des moyennes par degré montre où cet effet s'atténue.")
+
+
 @st.cache_data(show_spinner="Recherche des ordres SARIMA avec auto_arima (environ une minute)…")
 def ordres_auto(train):
     return modeles.ordres_auto_arima(train)
 
 
 @st.cache_data(show_spinner="Entraînement du modèle…")
-def prevoir(nom, train, horizon, parametres):
+def prevoir(nom, train, horizon, parametres, temperature=None):
+    """Prévision du modèle `nom`, et ordres retenus pour VARIMA (None pour les autres modèles)."""
+    if nom in MODELES_METEO:
+        # Les modèles météo s'entraînent sur la période où la température est disponible
+        train = train[train.index >= temperature.index[0]]
+        if nom == "XGBoost + température":
+            return modeles.xgboost(train, horizon, temperature), None
+        return modeles.varima(train, horizon, temperature)
+    return _prevoir_sans_meteo(nom, train, horizon, parametres), None
+
+
+def _prevoir_sans_meteo(nom, train, horizon, parametres):
     if nom == "Naive Drift":
         return modeles.naive_drift(train, horizon)
     if nom == "Naive saisonnier":
@@ -212,21 +293,39 @@ def prophet_disponible():
     return importlib.util.find_spec("prophet") is not None
 
 
-def onglet_previsions(journaliere):
+def meteo_utilisable(train, test, temperature):
+    """Les modèles météo ont besoin de la température sur toute la période et de deux ans d'entraînement."""
+    if temperature is None:
+        return False
+    debut = max(train.index[0], temperature.index[0])
+    couverture = temperature.reindex(pd.date_range(debut, test.index[-1], freq="D"))
+    return couverture.notna().all() and (train.index >= debut).sum() >= 2 * modeles.PERIODE_ANNUELLE
+
+
+def onglet_previsions(journaliere, temperature):
     st.markdown(
         "Les modèles s'entraînent sur le passé et prévoient la période de test. Naive Drift, Naive saisonnier "
         "et SARIMA travaillent sur la série désaisonnalisée ; la saisonnalité annuelle, estimée sur "
         "l'entraînement seul, est ensuite réintégrée. Toutes les prévisions sont donc comparées sur la "
         "consommation réelle."
     )
-    disponibles = [m for m in COULEURS_MODELES if m != "Prophet" or prophet_disponible()]
     c1, c2 = st.columns([1, 2])
     annees_test = c1.radio("Période de test", [1, 2], index=1, format_func=lambda a: f"{a} an" + ("s" if a > 1 else ""),
                            horizontal=True)
-    choisis = c2.multiselect("Modèles", disponibles, default=[m for m in ("Naive Drift", "Naive saisonnier", "XGBoost")
-                                                               if m in disponibles])
     horizon = 365 * annees_test
     train, test = journaliere.iloc[:-horizon], journaliere.iloc[-horizon:]
+    avec_meteo = meteo_utilisable(train, test, temperature)
+    disponibles = [m for m in COULEURS_MODELES
+                   if (m != "Prophet" or prophet_disponible()) and (m not in MODELES_METEO or avec_meteo)]
+    choisis = c2.multiselect("Modèles", disponibles, default=[m for m in ("Naive Drift", "Naive saisonnier", "XGBoost")
+                                                               if m in disponibles])
+    if temperature is not None and not avec_meteo:
+        st.caption("Les modèles avec température sont masqués : le fichier météo ne couvre pas toute la période "
+                   "de test, ou laisse moins de deux ans d'entraînement.")
+    elif avec_meteo:
+        st.caption(f"Les modèles avec température s'entraînent à partir du {max(train.index[0], temperature.index[0]):%d/%m/%Y}, "
+                   "date de début du fichier météo. La température de la période de test est la température observée : "
+                   "leur avantage est donc un maximum, qu'une vraie prévision météo réduirait.")
 
     parametres = {m: {} for m in choisis}
     if "Naive saisonnier" in choisis:
@@ -249,7 +348,12 @@ def onglet_previsions(journaliere):
         st.info("Choisissez au moins un modèle.")
         return
 
-    previsions = {m: prevoir(m, train, horizon, parametres[m]) for m in choisis}
+    resultats = {m: prevoir(m, train, horizon, parametres[m], temperature if m in MODELES_METEO else None)
+                 for m in choisis}
+    previsions = {m: prevision for m, (prevision, _) in resultats.items()}
+    if "VARIMA (conso + température)" in resultats:
+        p, d = resultats["VARIMA (conso + température)"][1]
+        st.caption(f"VARIMA retenu : p = {p} (AIC d'un VAR), d = {d} (test de Dickey-Fuller), q = 0.")
 
     fig = go.Figure()
     historique = journaliere.iloc[-(horizon + 365):]
@@ -292,16 +396,23 @@ if nom is None:
     )
     st.stop()
 
-demi_horaire, journaliere = charger(contenu, nom)
+demi_horaire, journaliere = charger(contenu, nom, date_modification(contenu, nom))
+contenu_meteo, nom_meteo = source_temperature()
+temperature = None
+if nom_meteo is not None:
+    temperature = charger_temperature(contenu_meteo, nom_meteo, date_modification(contenu_meteo, nom_meteo))
 
-presentation, exploration, stationnarite, previsions = st.tabs(
-    ["Présentation", "Exploration", "Saisonnalité et stationnarité", "Prévisions"]
-)
-with presentation:
+titres = ["Présentation", "Exploration", "Saisonnalité et stationnarité"]
+titres += (["Météo"] if temperature is not None else []) + ["Prévisions"]
+onglets = dict(zip(titres, st.tabs(titres)))
+with onglets["Présentation"]:
     onglet_presentation(journaliere)
-with exploration:
+with onglets["Exploration"]:
     onglet_exploration(demi_horaire, journaliere)
-with stationnarite:
+with onglets["Saisonnalité et stationnarité"]:
     onglet_stationnarite(journaliere)
-with previsions:
-    onglet_previsions(journaliere)
+if temperature is not None:
+    with onglets["Météo"]:
+        onglet_meteo(journaliere, temperature)
+with onglets["Prévisions"]:
+    onglet_previsions(journaliere, temperature)
