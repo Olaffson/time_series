@@ -56,10 +56,19 @@ def naive_saisonnier(train, horizon, k=7):
 
 
 def sarima(train, horizon, order, seasonal_order, trend=None):
+    """Prévision SARIMA, et indicateur de convergence de l'optimisation (False si elle a échoué)."""
+    import warnings
+
+    from statsmodels.tools.sm_exceptions import ConvergenceWarning
+
     desaison, saisonnalite_future = _decomposer(train)
-    resultats = sm.tsa.SARIMAX(desaison, order=order, seasonal_order=seasonal_order, trend=trend).fit(disp=False)
+    with warnings.catch_warnings():
+        # L'échec de convergence est renvoyé à l'appelant plutôt qu'affiché dans la console
+        warnings.simplefilter("ignore", ConvergenceWarning)
+        resultats = sm.tsa.SARIMAX(desaison, order=order, seasonal_order=seasonal_order, trend=trend).fit(disp=False)
+    converge = bool(resultats.mle_retvals.get("converged", True))
     prevision = resultats.get_forecast(horizon).predicted_mean.to_numpy()
-    return pd.Series(prevision + saisonnalite_future(horizon), index=_index_futur(train, horizon))
+    return pd.Series(prevision + saisonnalite_future(horizon), index=_index_futur(train, horizon)), converge
 
 
 def ordres_auto_arima(train):
