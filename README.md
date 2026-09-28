@@ -30,11 +30,12 @@ L'application présente le projet de façon interactive. Pour la lancer depuis l
 streamlit run app/streamlit_app.py
 ```
 
-Elle utilise `data/data.csv`, ou à défaut `data/hdf_daily.csv` produit par le notebook `3_model`. On peut aussi charger un fichier CSV depuis la barre latérale. Elle comporte quatre onglets :
+Elle utilise `data/data.csv`, ou à défaut `data/hdf_daily.csv` produit par le notebook `3_model`. On peut aussi charger un fichier CSV depuis la barre latérale. Si le fichier météo `data/temperature-quotidienne-regionale.csv` est présent (ou chargé dans la barre latérale), l'application ajoute un onglet **Météo** et deux modèles avec température. Elle comporte les onglets suivants :
 - **Présentation** : objectif, démarche et chiffres clés de la série.
 - **Exploration** : série journalière avec moyenne mobile réglable, agrégations (semaine, mois, trimestre, année) et box-plots de saisonnalité (mois, jour de la semaine, heure).
 - **Saisonnalité et stationnarité** : décomposition additive annuelle et tests ADF et KPSS, sur la série brute et sur la série désaisonnalisée.
-- **Prévisions** : choix de la période de test (un ou deux ans) et des modèles (Naive Drift, Naive saisonnier, SARIMA avec ordres manuels ou trouvés par `auto_arima`, XGBoost, Prophet), graphique des prévisions et tableau MAPE, MAE et RMSE.
+- **Météo** (avec le fichier de température) : consommation et température sur la période commune, corrélation, et nuage de points consommation / température avec la moyenne par degré.
+- **Prévisions** : choix de la période de test (un ou deux ans) et des modèles (Naive Drift, Naive saisonnier, SARIMA avec ordres manuels ou trouvés par `auto_arima`, XGBoost, Prophet et, avec la météo, XGBoost + température et VARIMA sur le couple consommation / température), graphique des prévisions et tableau MAPE, MAE et RMSE. Les modèles avec température s'entraînent à partir de 2016 (début du fichier météo) et ne sont proposés que si la température couvre toute la période de test.
 
 Dans l'application, toutes les prévisions sont comparées sur la consommation réelle. Les modèles qui travaillent sur la série désaisonnalisée réintègrent la saisonnalité annuelle, estimée sur la seule période d'entraînement.
 

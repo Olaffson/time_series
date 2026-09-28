@@ -84,13 +84,45 @@ def _variables_calendaires(index):
     )
 
 
-def xgboost(train, horizon):
+def xgboost(train, horizon, temperature=None):
+    """XGBoost sur des variables calendaires, et sur la température observée si elle est fournie."""
     from xgboost import XGBRegressor
 
-    modele = XGBRegressor(n_estimators=100, max_depth=3, learning_rate=0.1, random_state=0)
-    modele.fit(_variables_calendaires(train.index), train)
     index = _index_futur(train, horizon)
-    return pd.Series(modele.predict(_variables_calendaires(index)), index=index)
+    x_train, x_futur = _variables_calendaires(train.index), _variables_calendaires(index)
+    if temperature is not None:
+        x_train["temperature"] = temperature.reindex(train.index).to_numpy()
+        x_futur["temperature"] = temperature.reindex(index).to_numpy()
+    modele = XGBRegressor(n_estimators=100, max_depth=3, learning_rate=0.1, random_state=0)
+    modele.fit(x_train, train)
+    return pd.Series(modele.predict(x_futur), index=index)
+
+
+def varima(train, horizon, temperature, max_lags=14):
+    """VARIMA(p, d, 0) sur la consommation et la température désaisonnalisées.
+
+    d vient du test de Dickey-Fuller, p de l'AIC d'un VAR. Renvoie la prévision de consommation
+    (saisonnalité annuelle réintégrée) et les ordres (p, d).
+    """
+    import warnings
+
+    from darts import TimeSeries
+    from darts.models import VARIMA
+    from statsmodels.tsa.stattools import adfuller
+
+    conso_desaison, saisonnalite_future = _decomposer(train)
+    temperature_desaison, _ = _decomposer(temperature.reindex(train.index))
+    series = pd.DataFrame({"consommation": conso_desaison, "temperature": temperature_desaison})
+
+    d = 1 if max(adfuller(series[c])[1] for c in series.columns) > 0.05 else 0
+    selection = series.diff().dropna() if d == 1 else series
+    p = max(1, sm.tsa.VAR(selection).select_order(maxlags=max_lags).aic)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        modele = VARIMA(p=p, d=d, q=0).fit(TimeSeries.from_dataframe(series, freq="D"))
+        prevision = modele.predict(horizon).to_dataframe()["consommation"].to_numpy()
+    return pd.Series(prevision + saisonnalite_future(horizon), index=_index_futur(train, horizon)), (p, d)
 
 
 def prophet(train, horizon):
