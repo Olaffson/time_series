@@ -267,26 +267,25 @@ def ordres_auto(train):
 
 @st.cache_data(show_spinner="Entraînement du modèle…")
 def prevoir(nom, train, horizon, parametres, temperature=None):
-    """Prévision du modèle `nom`, et ordres retenus pour VARIMA (None pour les autres modèles)."""
+    """Prévision du modèle `nom`, et une information propre au modèle.
+
+    Cette information vaut (p, d) pour VARIMA, l'indicateur de convergence pour SARIMA, et None sinon.
+    """
     if nom in MODELES_METEO:
         # Les modèles météo s'entraînent sur la période où la température est disponible
         train = train[train.index >= temperature.index[0]]
         if nom == "XGBoost + température":
             return modeles.xgboost(train, horizon, temperature), None
         return modeles.varima(train, horizon, temperature)
-    return _prevoir_sans_meteo(nom, train, horizon, parametres), None
-
-
-def _prevoir_sans_meteo(nom, train, horizon, parametres):
-    if nom == "Naive Drift":
-        return modeles.naive_drift(train, horizon)
-    if nom == "Naive saisonnier":
-        return modeles.naive_saisonnier(train, horizon, k=parametres["k"])
     if nom == "SARIMA":
         return modeles.sarima(train, horizon, parametres["order"], parametres["seasonal_order"], parametres["trend"])
+    if nom == "Naive Drift":
+        return modeles.naive_drift(train, horizon), None
+    if nom == "Naive saisonnier":
+        return modeles.naive_saisonnier(train, horizon, k=parametres["k"]), None
     if nom == "XGBoost":
-        return modeles.xgboost(train, horizon)
-    return modeles.prophet(train, horizon)
+        return modeles.xgboost(train, horizon), None
+    return modeles.prophet(train, horizon), None
 
 
 def prophet_disponible():
@@ -342,7 +341,7 @@ def onglet_previsions(journaliere, temperature):
                 seasonal_order = tuple(cols[3 + i].number_input(n, 0, 2, v) for i, (n, v) in enumerate(zip("PDQ", (1, 0, 1)))) + (7,)
                 trend = None
             st.caption(f"Modèle utilisé : SARIMA{order}{seasonal_order}, constante : {'oui' if trend else 'non'}")
-            parametres["SARIMA"] = {"order": order, "seasonal_order": seasonal_order, "trend": trend}
+            parametres["SARIMA"] = {"order": order, "seasonal_order": seasonal_order, "trend": trend, "auto": auto}
 
     if not choisis:
         st.info("Choisissez au moins un modèle.")
@@ -354,6 +353,20 @@ def onglet_previsions(journaliere, temperature):
     if "VARIMA (conso + température)" in resultats:
         p, d = resultats["VARIMA (conso + température)"][1]
         st.caption(f"VARIMA retenu : p = {p} (AIC d'un VAR), d = {d} (test de Dickey-Fuller), q = 0.")
+    if "SARIMA" in resultats:
+        prevision_sarima, converge = resultats["SARIMA"]
+        incoherente = not np.isfinite(prevision_sarima).all() or (prevision_sarima <= 0).any()
+        conseil = ("Essayez d'autres ordres." if parametres["SARIMA"].get("auto")
+                   else "Essayez d'autres ordres, ou cochez « Trouver les ordres avec auto_arima ».")
+        if incoherente:
+            raison = "sa prévision contient des consommations nulles, négatives ou infinies"
+            if not converge:
+                raison = "l'optimisation de ses coefficients n'a pas convergé et " + raison
+            st.warning(f"**SARIMA : prévision incohérente**, car {raison}. Ses scores ne sont pas comparables "
+                       f"à ceux des autres modèles. {conseil}", icon="⚠️")
+        elif not converge:
+            st.warning("**SARIMA : résultat à prendre avec prudence**, car l'optimisation de ses coefficients "
+                       f"n'a pas convergé : ils peuvent être mal estimés. {conseil}", icon="⚠️")
 
     fig = go.Figure()
     historique = journaliere.iloc[-(horizon + 365):]
