@@ -11,12 +11,14 @@ Les données de consommation électrique des Hauts de France sont disponibles su
 ## Installation et exécution
 1. Installer les dépendances : `pip install -r requirements.txt`
 2. Télécharger le fichier CSV de la consommation quotidienne brute régionale (séparateur `;`) et l'enregistrer sous `data/data.csv` à la racine du projet (les fichiers `.csv` ne sont pas versionnés).
-3. Exécuter les notebooks du dossier `notebook/` dans l'ordre (`1_analys`, puis `3_model`), de haut en bas. `3_model` génère les fichiers `data/hdf_dataset.csv` et `data/hdf_daily.csv`. Son exécution complète prend plusieurs minutes, à cause des recherches `auto_arima`.
+3. Pour le notebook `4_meteo_varima`, télécharger aussi la **température quotidienne régionale** (jeu de données « Température quotidienne régionale (depuis janvier 2016) » de l'ODRE, sur [data.gouv.fr](https://www.data.gouv.fr/fr/datasets/temperature-quotidienne-regionale-depuis-janvier-2016/)) et l'enregistrer sous `data/temperature-quotidienne-regionale.csv` (séparateur `;`).
+4. Exécuter les notebooks du dossier `notebook/` dans l'ordre (`1_analys`, `3_model`, puis `4_meteo_varima`), de haut en bas. `3_model` génère les fichiers `data/hdf_dataset.csv` et `data/hdf_daily.csv`. Son exécution complète prend plusieurs minutes, à cause des recherches `auto_arima`.
 
 ## Contenu du dépôt
 - `notebook/1_analys.ipynb` : découverte et analyse de la série. Agrégations, moyenne mobile, box-plots de saisonnalité, tests de stationnarité (Dickey-Fuller, KPSS), désaisonnalisation annuelle et décomposition additive ou multiplicative.
 - `notebook/2_veille.ipynb` : veille sur les modèles de séries temporelles.
 - `notebook/3_model.ipynb` : modélisation et prévision (ARIMA, SARIMA, Naive Drift et Naive saisonnier avec Darts, XGBoost, Prophet).
+- `notebook/4_meteo_varima.ipynb` : ajout de la température moyenne quotidienne des Hauts-de-France. Lien entre température et consommation, XGBoost avec et sans température, et modèle VARIMA sur le couple (consommation, température), comparé à un ARIMA sur la consommation seule.
 - `notebook/correction/` : notebooks de correction.
 - `app/` : application Streamlit de présentation du projet (voir ci-dessous).
 - `rapport/` : rapport de veille (formats ODT et PDF).
@@ -42,6 +44,7 @@ Dans l'application, toutes les prévisions sont comparées sur la consommation r
   - ARIMA (question 7) : recherche sur toute la série, sans séparation entraînement/test.
   - SARIMA : saisonnalité hebdomadaire (m=7), recherche sur les seules données d'entraînement.
 - **Évaluation** : les modèles de prévision gardent la dernière ou les deux dernières années en test. Ils sont comparés avec la MAPE, ainsi qu'avec le MAE et le RMSE.
+- **Météo et VARIMA** (`4_meteo_varima`) : la période commune aux deux fichiers commence en 2016. Le VARIMA modélise ensemble la consommation et la température désaisonnalisées. Ses ordres sont choisis automatiquement : `d` selon le test de Dickey-Fuller, `p` selon l'AIC d'un VAR, et `q = 0`.
 - **XGBoost** s'entraîne sur des variables calendaires (jour de la semaine, jour de l'année, mois, trimestre, année).
 
 ## Ressources
