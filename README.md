@@ -92,7 +92,7 @@ L'application affiche un avertissement quand l'optimisation du SARIMA ne converg
 - Décompositions additive et multiplicative avec une période annuelle (365 jours).
 
 ### Modélisation (`3_model`)
-- **Série utilisée** : la consommation moyenne journalière. Les modèles ARIMA, SARIMA, Naive Drift et Naive saisonnier travaillent sur la série **désaisonnalisée** : on retire la composante saisonnière annuelle obtenue par `seasonal_decompose`.
+- **Série utilisée** : la consommation moyenne journalière. Les modèles ARIMA, SARIMA, Naive Drift et Naive saisonnier travaillent sur la série **désaisonnalisée** : on retire la composante saisonnière annuelle obtenue par `seasonal_decompose`. Pour les modèles évalués sur une période de test, cette composante est estimée sur la seule période d'entraînement, puis prolongée sur la période de test : aucune information du test n'est utilisée. Les analyses sans période de test (ARIMA de la question 7, diagnostics des résidus, graphiques ACF / PACF) utilisent la désaisonnalisation estimée sur toute la série.
 - **Choix des ordres** : les ordres des modèles ARIMA et SARIMA sont trouvés par `auto_arima` (librairie pmdarima), qui minimise l'AIC. Les modèles statsmodels reprennent ces ordres et la constante, et chaque cellule affiche le modèle retenu.
   - ARIMA : recherche sur toute la série, sans séparation entraînement / test.
   - SARIMA : saisonnalité hebdomadaire (m = 7), recherche sur les seules données d'entraînement.
@@ -111,7 +111,6 @@ L'application affiche un avertissement quand l'optimisation du SARIMA ne converg
 - **Température observée** : sur la période de test, les modèles avec température utilisent la température réellement mesurée, pas une prévision météo. Leur avantage est donc un maximum, qu'une vraie prévision météo réduirait.
 - **Horizon long** : sur un ou deux ans, les prévisions d'un modèle autorégressif (ARIMA, SARIMA, VARIMA) convergent vite vers une valeur moyenne ; l'essentiel de la forme de la prévision vient alors de la saisonnalité annuelle réintégrée.
 - **Convergence du SARIMA** : selon les données et les ordres choisis, l'optimisation peut ne pas converger. L'application le signale ; dans les notebooks, statsmodels affiche un `ConvergenceWarning`.
-- **Désaisonnalisation dans les notebooks** : dans `3_model`, la composante saisonnière est estimée sur toute la série, période de test comprise. L'application et `4_meteo_varima` l'estiment sur la seule période d'entraînement.
 
 ## Contexte du projet
 
